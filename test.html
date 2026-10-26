@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>計算テスト</title>
+<style>body{font:14px/1.6 -apple-system,sans-serif;padding:16px}pre{white-space:pre-wrap}.ng{color:#c00}</style>
+</head>
+<body>
+<h1>計算テスト</h1>
+<pre id="out"></pre>
+<script src="../js/calc.js"></script>
+<script>
+  // Node が無くてもブラウザで同じテストを動かすための最小の仕組み
+  const out = document.getElementById('out');
+  const log = (s, ng) => { const span = document.createElement('span'); if (ng) span.className = 'ng'; span.textContent = s + '\n'; out.appendChild(span); };
+  console.log = (s) => log(s);
+  console.error = (s) => log(s, true);
+  window.process = { exitCode: 0 };
+  const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const assertShim = {
+    strictEqual: (a, b) => { if (a !== b) throw new Error(`期待 ${b} / 実際 ${a}`); },
+    notStrictEqual: (a, b) => { if (a === b) throw new Error(`同じ値になった ${a}`); },
+    deepStrictEqual: (a, b) => { if (!eq(a, b)) throw new Error(`期待 ${JSON.stringify(b)} / 実際 ${JSON.stringify(a)}`); },
+  };
+  window.require = (p) => (p === 'assert' ? assertShim : window.Calc);
+</script>
+<script src="calc.test.js"></script>
+<script>document.title = process.exitCode ? 'NG' : 'OK';</script>
+</body>
+</html>
