@@ -1,9 +1,9 @@
 // オフラインでも開けるようにするための仕組み（サービスワーカー）
 // 方針：まずネットから最新を取りに行き、電波がない時は保存しておいたものを使う
-const CACHE = 'cross-genba-v1';
+const CACHE = 'cross-genba-v2';
 const SHELL = [
-  './', 'index.html', 'css/style.css', 'js/calc.js', 'js/db.js', 'js/ocr.js', 'js/app.js',
-  'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png',
+  './', 'index.html', 'style.css', 'calc.js', 'db.js', 'ocr.js', 'app.js',
+  'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png',
 ];
 
 self.addEventListener('install', (e) => {

@@ -26,7 +26,7 @@
 | 未施工 | まだ施工してない枚数ぶん（糊付け済みも含む） |
 
 長さはmmの整数で計算して、表示の時だけmに直す（小数の誤差対策）。
-テスト：`tests/test.html` をブラウザで開くと15項目チェック。
+テスト：`test.html` をブラウザで開くと15項目チェック。
 
 ## Macで動かす
 
@@ -36,15 +36,16 @@ cd cross-app && python3 -m http.server 8765
 
 ブラウザで http://localhost:8765 を開く。
 
-## ファイル構成
+## ファイル構成（フォルダなし。更新する時は全部選んでGitHubにドラッグするだけ）
 
 - `index.html` 入口
-- `js/calc.js` 計算（ここだけテスト対象）
-- `js/db.js` 端末内保存（IndexedDB）
-- `js/ocr.js` 写真の読み取り（Claude / Tesseract）
-- `js/app.js` 画面と操作
-- `css/style.css` デザイン
-- `sw.js`・`manifest.webmanifest`・`icons/` ホーム画面追加・オフライン用
+- `calc.js` 計算（ここだけテスト対象）
+- `db.js` 端末内保存（IndexedDB）
+- `ocr.js` 写真の読み取り（無料OCR / 許可制の有料AI）
+- `app.js` 画面と操作
+- `style.css` デザイン
+- `sw.js`・`manifest.webmanifest`・`icon-*.png` ホーム画面追加・オフライン用
+- `test.html`・`calc.test.js` 計算テスト
 
 ## 写真の読み取り（無料が基本）
 

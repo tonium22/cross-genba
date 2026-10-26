@@ -1,6 +1,6 @@
-// 計算テスト： node tests/calc.test.js で実行
+// 計算テスト： node calc.test.js で実行
 const assert = require('assert');
-const C = require('../js/calc.js');
+const C = require('./calc.js');
 
 let passed = 0;
 function t(name, fn) {
