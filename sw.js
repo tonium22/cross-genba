@@ -1,6 +1,6 @@
 // オフラインでも開けるようにするための仕組み（サービスワーカー）
 // 方針：まずネットから最新を取りに行き、電波がない時は保存しておいたものを使う
-const CACHE = 'cross-genba-v3';
+const CACHE = 'cross-genba-v4';
 const SHELL = [
   './', 'index.html', 'style.css', 'calc.js', 'db.js', 'ocr.js', 'app.js',
   'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-180.png',

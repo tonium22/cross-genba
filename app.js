@@ -202,20 +202,25 @@
   // ---------- データ操作 ----------
   async function touch(store, obj) { obj.updatedAt = Date.now(); await DB.put(store, obj); return obj; }
 
-  async function siteForm(site) {
+  // opts.quick：すぐ計算から保存する時。現場名だけ（仮の名前入り）で、住所などは後から編集
+  async function siteForm(site, opts) {
     const isNew = !site;
+    const quick = isNew && opts && opts.quick;
+    const d = new Date();
     const v = await formModal({
       title: isNew ? '新しい現場' : '現場を編集',
-      submitLabel: isNew ? '作成する' : '保存',
+      submitLabel: quick ? '作成して保存' : (isNew ? '作成する' : '保存'),
       fields: [
-        { name: 'name', label: '現場名', required: true, value: site && site.name, placeholder: '例：堂島タワーマンション 1203' },
+        { name: 'name', label: '現場名', required: true, value: site ? site.name : (quick ? `${d.getMonth() + 1}/${d.getDate()}の現場` : ''), placeholder: '例：堂島タワーマンション 1203', hint: quick ? '仮の名前のままでOK。住所や正式な名前は後から「編集」で直せます' : '' },
+      ].concat(quick ? [] : [
         { name: 'address', label: '住所（任意）', value: site && site.address, placeholder: '例：大阪市北区堂島…' },
         { name: 'startDate', label: '作業開始日', type: 'date', value: site ? site.startDate : today() },
         { name: 'status', label: '作業ステータス', type: 'seg', value: site ? site.status : 'before', options: Object.entries(STATUS).map(([value, label]) => ({ value, label })) },
         { name: 'memo', label: '現場メモ', type: 'textarea', value: site && site.memo, placeholder: '例：駐車場は裏、エレベーター養生あり' },
-      ],
+      ]),
     });
     if (!v) return null;
+    if (quick) Object.assign(v, { startDate: today(), status: 'doing', address: '', memo: '' });
     const s = Object.assign(site || { id: DB.uid(), createdAt: Date.now() }, v);
     await touch('sites', s);
     DB.persist();
@@ -223,13 +228,13 @@
     return s;
   }
 
-  async function clothForm(siteId, cloth) {
+  async function clothForm(siteId, cloth, defaultCode) {
     const isNew = !cloth;
     const v = await formModal({
       title: isNew ? 'クロス品番を追加' : '品番を編集',
       submitLabel: isNew ? '追加する' : '保存',
       fields: [
-        { name: 'code', label: '品番', required: true, value: cloth && cloth.code, placeholder: '例：SP2578 / 天井用クロス' },
+        { name: 'code', label: '品番', required: true, value: cloth ? cloth.code : defaultCode, placeholder: '例：SP2578 / 天井用クロス', hint: defaultCode ? '品番が分からなければこのままでOK。後から「編集」で直せます' : '' },
         { name: 'maker', label: 'メーカー（任意）', value: cloth && cloth.maker, placeholder: '例：サンゲツ' },
         { name: 'place', label: '使用場所', value: cloth && cloth.place, placeholder: '例：リビング・天井・洗面所' },
       ].concat(isNew ? [] : [
@@ -377,6 +382,8 @@
     return header('クロス現場帳', '', `<a class="icon-btn" href="#/settings" aria-label="設定" style="display:inline-flex;align-items:center;text-decoration:none">⚙ 設定</a>`) + `
       <main class="wrap">
         ${backupAlert}
+        <button class="camera-btn" data-act="quickScan"><span class="ic">📷</span>写真ですぐ計算</button>
+        <div class="hint" style="margin:6px 4px 14px">現場名や品番は、計算したあと保存する時に決めればOK</div>
         <input class="search" type="search" placeholder="🔍 現場名・住所・品番で検索" value="${esc(ui.query)}" data-input="query">
         <div class="row" style="margin:10px 2px 4px">
           <div class="grow meta">${list.length}件の現場</div>
@@ -567,12 +574,15 @@
   // ---------- 撮影・読み取り ----------
   function newScan(clothId) { scan = { clothId, phase: 'pick', items: [], blob: null, hash: null, url: null, memo: '', error: '', method: '' }; }
 
+  // clothId が 'quick' の時は「すぐ計算」：品番を決めずに読み取り、保存する時に現場・品番を選ぶ
   async function viewScan(clothId) {
-    const c = await DB.get('cloths', clothId);
-    if (!c) return notFound();
+    const quick = clothId === 'quick';
+    const c = quick ? null : await DB.get('cloths', clothId);
+    if (!quick && !c) return notFound();
     if (!scan || scan.clothId !== clothId) newScan(clothId);
     const useAi = aiOn();
-    const top = header(`読み取り：${c.code}`, backBtn(`#/cloth/${clothId}`));
+    const backTo = quick ? '#/' : `#/cloth/${clothId}`;
+    const top = header(quick ? '写真ですぐ計算' : `読み取り：${c.code}`, backBtn(backTo));
 
     if (scan.phase === 'pick') {
       return top + `<main class="wrap">
@@ -597,7 +607,7 @@
     if (scan.phase === 'dup') {
       return top + `<main class="wrap"><div class="alert danger"><b>この写真はすでに登録されています。</b><br>${esc(scan.dupInfo).replace(/\n/g, '<br>')}<br>二重登録を防ぐため、この写真は読み取りません。</div>
         <img class="scan-preview" src="${scan.url}" alt="撮影した寸法表">
-        <div class="btn-grid" style="margin-top:12px"><button class="btn sub" data-act="scanRetake">撮り直す</button><a class="btn ghost" href="#/cloth/${clothId}">戻る</a></div></main>`;
+        <div class="btn-grid" style="margin-top:12px"><button class="btn sub" data-act="scanRetake">撮り直す</button><a class="btn ghost" href="${backTo}">戻る</a></div></main>`;
     }
     if (scan.phase === 'error') {
       return top + `<main class="wrap"><div class="alert danger">${esc(scan.error)}</div>
@@ -637,7 +647,7 @@
       <div class="total-line"><span>合計（チェックした行）</span><span class="v num" id="scan-total">${M(scanTotal())}</span></div>
       ${scan.url && scan.method !== 'ai' ? '<div class="hint" style="margin-bottom:10px">無料OCRの結果です。読み間違いが多い時は、写真アプリの「テキスト認識」でコピー→「文字を貼り付け」も試してください。</div>' : ''}
     </main>
-    <div class="fab-bar">${scan.url ? '<button class="btn sub" data-act="scanRetake" style="flex:0.7">撮り直す</button>' : ''}<button class="btn" data-act="scanSave">この内容で保存</button></div>`;
+    <div class="fab-bar">${scan.url ? '<button class="btn sub" data-act="scanRetake" style="flex:0.7">撮り直す</button>' : ''}<button class="btn" data-act="scanSave">${quick ? '現場に保存する' : 'この内容で保存'}</button></div>`;
   }
 
   function scanTotal() {
@@ -693,6 +703,24 @@
     render();
   }
 
+  // すぐ計算の保存先を選ぶ：現場（新規は名前だけ）→ 品番（新規は仮の名前入り）
+  async function chooseDestination() {
+    const sites = (await DB.all('sites')).filter((s) => s.status !== 'done').sort((a, b) => b.updatedAt - a.updatedAt);
+    let siteId = await chooseBox('どの現場に保存する？', [{ value: '__new', label: '＋ 新しい現場を作る', sub: '名前は仮のままでOK。後から直せます' }]
+      .concat(sites.map((s) => ({ value: s.id, label: s.name, sub: `${STATUS[s.status]}${s.startDate ? ' ・ 開始 ' + fmtDate(s.startDate) : ''}` }))));
+    if (!siteId) return null;
+    if (siteId === '__new') { const s = await siteForm(null, { quick: true }); if (!s) return null; siteId = s.id; }
+    const cloths = (await DB.by('cloths', 'siteId', siteId)).sort((a, b) => a.createdAt - b.createdAt);
+    let clothId = '__new';
+    if (cloths.length) {
+      clothId = await chooseBox('どの品番に追加する？', cloths.map((c) => ({ value: c.id, label: c.code, sub: [c.maker, c.place].filter(Boolean).join(' ・ ') }))
+        .concat([{ value: '__new', label: '＋ 新しい品番を追加' }]));
+      if (!clothId) return null;
+    }
+    if (clothId === '__new') { const c = await clothForm(siteId, null, `クロス${cloths.length + 1}`); if (!c) return null; clothId = c.id; }
+    return clothId;
+  }
+
   async function saveScan() {
     const use = scan.items.filter((it) => it.use);
     if (!use.length) return toast('保存する行がありません');
@@ -701,7 +729,9 @@
     const unchecked = use.filter((it) => it.status === 'check' && !it.edited).length;
     if (unchecked && !(await confirmBox(`要確認の行が${unchecked}行残っています。\n写真と見比べて合っていましたか？`, 'このまま保存', false))) return;
 
-    const c = await DB.get('cloths', scan.clothId);
+    const clothId = scan.clothId === 'quick' ? await chooseDestination() : scan.clothId;
+    if (!clothId) return;
+    const c = await DB.get('cloths', clothId);
     let photoId = null;
     if (scan.blob) {
       // 保存の直前にももう一度重複チェック
@@ -900,6 +930,7 @@
       newScan(clothId);
       go(`#/scan/${clothId}`);
     },
+    quickScan: () => { newScan('quick'); go('#/scan/quick'); },
     scanCloth: (el) => { newScan(el.dataset.id); go(`#/scan/${el.dataset.id}`); },
     scanRetake: () => { newScan(scan.clothId); render(); },
     scanRead: (el) => runRead(el.dataset.m),
