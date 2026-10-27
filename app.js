@@ -232,16 +232,37 @@
         { name: 'code', label: '品番', required: true, value: cloth && cloth.code, placeholder: '例：SP2578 / 天井用クロス' },
         { name: 'maker', label: 'メーカー（任意）', value: cloth && cloth.maker, placeholder: '例：サンゲツ' },
         { name: 'place', label: '使用場所', value: cloth && cloth.place, placeholder: '例：リビング・天井・洗面所' },
-        { name: 'stockM', label: '仕入れ量 m（任意）', type: 'number', inputmode: 'decimal', step: '0.1', min: 0, value: cloth && cloth.stockM, hint: '入れると「手元の在庫残」と「不足」を表示します' },
-        { name: 'extraPerPieceMm', label: '柄合わせ・ロス 1枚あたり mm（任意）', type: 'number', inputmode: 'numeric', min: 0, value: cloth && cloth.extraPerPieceMm, hint: '例：柄リピート分で1枚ごとに +100mm。入れた時だけ計算に足します' },
-        { name: 'extraFixedM', label: '端材・予備 m（任意）', type: 'number', inputmode: 'decimal', step: '0.1', min: 0, value: cloth && cloth.extraFixedM, hint: '必要メーターに固定で足す分' },
-      ],
+      ].concat(isNew ? [] : [
+        // 新規作成の時は数字の欄を出さない（寸法と間違えて入れてしまうのを防ぐ）。ロスは品番画面の「ロスを変更」で設定
+        { name: 'stockM', label: '仕入れ量 m（任意）', type: 'number', inputmode: 'decimal', step: '0.1', min: 0, value: cloth.stockM, hint: '入れると「手元の在庫残」と「不足」を表示します' },
+        { name: 'extraFixedM', label: '端材・予備 m（任意）', type: 'number', inputmode: 'decimal', step: '0.1', min: 0, value: cloth.extraFixedM, hint: '必要メーターに固定で足す分' },
+      ]),
     });
     if (!v) return null;
     const c = Object.assign(cloth || { id: DB.uid(), siteId, dims: [], usageLogs: [], photoIds: [], createdAt: Date.now() }, v);
     await touch('cloths', c);
     toast(isNew ? '品番を追加しました' : '保存しました');
     return c;
+  }
+
+  // ロス加算だけを変える専用フォーム。寸法・糊付け・施工の枚数には触らない
+  async function lossForm(cloth) {
+    const v = await formModal({
+      title: 'ロス加算（1枚ごと）',
+      fields: [{ name: 'loss', label: '1枚ごとに足す長さ（mm）', type: 'number', inputmode: 'numeric', min: 0, value: C.lossMm(cloth), hint: '柄合わせ・切りしろの分。0にすると「寸法×枚数」だけで計算します。普通は0〜150mmくらい' }],
+      validate: (o) => (o.loss != null && o.loss > 1000 ? '1000mmより大きい値は設定できません（寸法と間違えていませんか？）' : ''),
+    });
+    if (!v) return false;
+    const loss = Math.round(v.loss || 0);
+    if (loss > 300 && !(await confirmBox(`1枚ごとに +${loss}mm にします。\n寸法と間違えていませんか？`, 'このまま設定', false))) return false;
+    await setLoss(cloth.id, loss);
+    return true;
+  }
+  async function setLoss(clothId, loss) {
+    const c = await DB.get('cloths', clothId);
+    c.extraPerPieceMm = loss;
+    await touch('cloths', c);
+    toast(loss ? `ロスを1枚ごと +${loss}mm にしました` : 'ロスなし（0mm）にしました');
   }
 
   async function noteForm(siteId, note, presetClothId) {
@@ -453,8 +474,18 @@
     const s = C.clothSummary(c);
     const dims = c.dims || [];
 
-    const extraLine = (s.extraPiecesMm || s.extraFixedMm)
-      ? `<div class="alert info">ロス加算中：${c.extraPerPieceMm ? `1枚ごと +${c.extraPerPieceMm}mm（計 +${M(s.extraPiecesMm)}）` : ''}${c.extraPerPieceMm && c.extraFixedM ? ' ／ ' : ''}${c.extraFixedM ? `端材・予備 +${M(s.extraFixedMm)}` : ''}<br>寸法×枚数だけの合計は ${M(s.baseMm)}</div>` : '';
+    // 画面上部：寸法だけの合計 → ロス加算 → ロス込みの合計
+    const loss = C.lossMm(c);
+    const lossWarn = loss > 300
+      ? `<div class="alert danger">⚠ ロスが1枚ごと <b>+${loss}mm</b> になっています。寸法と間違えて入れていませんか？
+          <div class="btn-grid" style="margin-top:8px"><button class="btn small" data-act="lossZero" data-id="${id}">0mmに戻す</button><button class="btn small sub" data-act="editLoss" data-id="${id}">数値を変更</button></div></div>` : '';
+    const lossCard = `<div class="card num" style="padding:12px 16px">
+        <div class="row"><span class="grow meta">寸法だけの合計（${s.pieces}枚）</span><b>${M(s.baseMm)}</b></div>
+        <div class="row" style="margin-top:4px"><span class="grow meta">ロス加算</span><b>${loss ? `1枚ごと +${loss}mm` : 'なし（0mm）'}</b>
+          <button class="btn small ghost" style="margin-left:8px" data-act="editLoss" data-id="${id}">変更</button></div>
+        ${s.extraFixedMm ? `<div class="row" style="margin-top:4px"><span class="grow meta">端材・予備</span><b>+${M(s.extraFixedMm)}</b></div>` : ''}
+        <div class="row" style="margin-top:6px;border-top:1px solid var(--line);padding-top:6px"><span class="grow" style="font-weight:700">ロス込みの合計</span><b style="font-size:20px;color:var(--blue)">${M(s.requiredMm)}</b></div>
+      </div>`;
 
     const stock = s.stockMm != null ? `<div class="stats two" style="margin-top:8px">
         <div class="stat ${s.stockRemainMm < 0 ? 'bad' : ''}"><div class="v num">${M(s.stockRemainMm)}</div><div class="l">手元の在庫残（仕入れ ${M(s.stockMm)}）</div></div>
@@ -469,6 +500,7 @@
           <div class="dim-size num">${d.mm}<small>mm</small> × ${d.count}<small>枚</small></div>
           <div class="dim-total num">${M(len * k.count)}</div>
         </div>
+        ${loss ? `<div class="meta num" style="text-align:right">ロスなし ${M(d.mm * k.count)} ／ ロス込み ${M(len * k.count)}（1枚 ${len}mm）</div>` : ''}
         ${d.label ? `<div class="meta">${esc(d.label)}</div>` : ''}
         ${d.excluded ? '<div class="meta">（計算から除外中）</div>' : `
         <div class="stepper-row">
@@ -497,6 +529,8 @@
     return header(c.code, backBtn(`#/site/${c.siteId}`), `<button class="icon-btn" data-act="editCloth" data-id="${id}">編集</button>`) + `
       <main class="wrap">
         <div class="meta" style="margin:-4px 2px 10px">${esc(site ? site.name : '')}${c.maker ? ` ・ ${esc(c.maker)}` : ''}${c.place ? ` ・ ${esc(c.place)}` : ''}</div>
+        ${lossWarn}
+        ${lossCard}
         <div class="stats">
           <div class="stat"><div class="v num">${M(s.requiredMm)}</div><div class="l">必要</div></div>
           <div class="stat"><div class="v num">${M(s.usedMm)}</div><div class="l">使用済み</div></div>
@@ -509,8 +543,7 @@
         ${stock}
         ${progressBar(s)}
         <div class="legend"><span class="l-inst">施工済み ${s.piecesInstalled}枚</span><span class="l-paste">糊付け済み ${s.piecesPasted - s.piecesInstalled}枚</span><span class="l-un">未糊付け ${s.pieces - s.piecesPasted}枚</span></div>
-        <div style="margin-top:14px">${extraLine}</div>
-        <button class="camera-btn" data-act="scanCloth" data-id="${id}"><span class="ic">📷</span>寸法表の写真から追加</button>
+        <button class="camera-btn" style="margin-top:14px" data-act="scanCloth" data-id="${id}"><span class="ic">📷</span>寸法表の写真から追加</button>
 
         <div class="section-title"><span class="grow">寸法一覧（${s.pieces}枚）</span>
           <button class="btn small sub" data-act="pasteAll" data-id="${id}">全部糊付け</button>
@@ -845,6 +878,8 @@
 
     newCloth: async (el) => { const c = await clothForm(el.dataset.site); if (c) refresh(); },
     editCloth: async (el) => { const c = await DB.get('cloths', el.dataset.id); if (await clothForm(c.siteId, c)) refresh(); },
+    editLoss: async (el) => { if (await lossForm(await DB.get('cloths', el.dataset.id))) refresh(); },
+    lossZero: async (el) => { await setLoss(el.dataset.id, 0); refresh(); },
     deleteCloth: async (el) => { const c = await DB.get('cloths', el.dataset.id); if (await deleteCloth(c.id)) go(`#/site/${c.siteId}`); },
 
     scanSite: async (el) => {

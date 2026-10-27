@@ -106,6 +106,59 @@ t('ロス・柄合わせは設定したときだけ加算', () => {
   assert.strictEqual(s.extraPiecesMm, 400);
 });
 
+// 61枚・ロスなし83.54m になるテスト用データ（依頼の数字に合わせて作ったもの）
+const sixtyOne = () => [
+  { mm: 1750, count: 11, pasted: 5, installed: 3 },
+  { mm: 520, count: 4, pasted: 2, installed: 1 },
+  { mm: 220, count: 4 },
+  { mm: 2520, count: 11 },
+  { mm: 1900, count: 1 },
+  { mm: 1057, count: 30 },
+];
+
+t('61枚：ロスなし 83.54m / ロス50mm 86.59m / ロス100mm 89.64m', () => {
+  const dims = sixtyOne();
+  const s0 = C.clothSummary({ dims, extraPerPieceMm: 0 });
+  assert.strictEqual(s0.pieces, 61);
+  assert.strictEqual(C.fmtM(s0.baseMm), '83.54m');
+  assert.strictEqual(C.fmtM(s0.requiredMm), '83.54m');
+  assert.strictEqual(C.fmtM(C.clothSummary({ dims, extraPerPieceMm: 50 }).requiredMm), '86.59m');
+  assert.strictEqual(C.fmtM(C.clothSummary({ dims, extraPerPieceMm: 100 }).requiredMm), '89.64m');
+  assert.strictEqual(C.fmtM(C.clothSummary({ dims, extraPerPieceMm: 50 }).baseMm), '83.54m'); // 寸法だけの合計は変わらない
+});
+
+t('1750×11 ロス50mm → (1750+50)×11 = 19.80m、ロス0なら19.25m', () => {
+  const d = { mm: 1750, count: 11 };
+  assert.strictEqual(C.fmtM(C.pieceMm(d, { extraPerPieceMm: 50 }) * 11), '19.80m');
+  assert.strictEqual(C.fmtM(C.pieceMm(d, { extraPerPieceMm: 0 }) * 11), '19.25m');
+});
+
+t('今回の不具合：ロス1750mmだと 38.50m / 9.08m / 7.88m になっていた', () => {
+  const c = { extraPerPieceMm: 1750 };
+  assert.strictEqual(C.fmtM(C.pieceMm({ mm: 1750 }, c) * 11), '38.50m');
+  assert.strictEqual(C.fmtM(C.pieceMm({ mm: 520 }, c) * 4), '9.08m');
+  assert.strictEqual(C.fmtM(C.pieceMm({ mm: 220 }, c) * 4), '7.88m');
+});
+
+t('ロスを変えても寸法・糊付け済み・施工済みの枚数は変わらず、二重加算もされない', () => {
+  const cloth = { dims: sixtyOne(), extraPerPieceMm: 1750 };
+  const before = JSON.stringify(cloth.dims);
+  C.clothSummary(cloth);
+  cloth.extraPerPieceMm = 50;
+  C.clothSummary(cloth);
+  cloth.extraPerPieceMm = 50; // 同じ値を何度入れても
+  const s = C.clothSummary(cloth);
+  assert.strictEqual(JSON.stringify(cloth.dims), before);
+  assert.strictEqual(s.piecesPasted, 7);
+  assert.strictEqual(s.piecesInstalled, 4);
+  assert.strictEqual(C.fmtM(s.requiredMm), '86.59m');
+});
+
+t('ロスが空・マイナス・文字なら0として扱う', () => {
+  [undefined, null, '', -5, 'abc', 0].forEach((v) => assert.strictEqual(C.lossMm({ extraPerPieceMm: v }), 0));
+  assert.strictEqual(C.lossMm({ extraPerPieceMm: '50' }), 50);
+});
+
 t('除外した行は計算に入らない', () => {
   const s = C.clothSummary({ dims: [{ mm: 1000, count: 2 }, { mm: 5000, count: 1, excluded: true }] });
   assert.strictEqual(s.requiredMm, 2000);

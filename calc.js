@@ -49,9 +49,15 @@
   }
 
   // 1枚あたりの長さ（柄合わせ・ロスの余分を設定している場合だけ足す）
+  // 1枚あたりのロス（mm）。未設定・0・おかしな値は 0 として扱う
+  function lossMm(cloth) {
+    const v = Math.round(Number(cloth && cloth.extraPerPieceMm));
+    return isFinite(v) && v > 0 ? v : 0;
+  }
+
+  // 寸法そのもの（dim.mm）は書き換えず、計算のたびにロスを足すだけなので二重加算にならない
   function pieceMm(dim, cloth) {
-    const extra = cloth && cloth.extraPerPieceMm ? Number(cloth.extraPerPieceMm) : 0;
-    return Number(dim.mm) + extra;
+    return Number(dim.mm) + lossMm(cloth);
   }
 
   // 1つの寸法行の状態を数える
@@ -156,7 +162,7 @@
     return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0') + bytes.length.toString(16);
   }
 
-  const Calc = { normalize, parseDimText, pieceMm, dimCounts, setDimStage, clothSummary, fmtM, hashBytes, sumLogsMm };
+  const Calc = { normalize, parseDimText, lossMm, pieceMm, dimCounts, setDimStage, clothSummary, fmtM, hashBytes, sumLogsMm };
   if (typeof module !== 'undefined' && module.exports) module.exports = Calc;
   else root.Calc = Calc;
 })(typeof self !== 'undefined' ? self : this);
